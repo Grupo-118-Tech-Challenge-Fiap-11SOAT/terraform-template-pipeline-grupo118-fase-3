@@ -2,6 +2,12 @@ name: 'Reusable Terraform Creation Workflow'
 
 on:
   workflow_call:
+    inputs:
+      terraform_vars:
+        description: 'JSON string of Terraform variables as key-value pairs'
+        required: false
+        type: string
+        default: '{}'      
     secrets:
       AZURE_CLIENT_ID:
         required: true
@@ -13,6 +19,7 @@ on:
         required: true
       TF_API_TOKEN:
         required: false
+ 
 
 env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -73,10 +80,22 @@ jobs:
     - name: Terraform Init
       run: terraform init -input=false
 
+    - name: Generate Terraform Variables
+      if: inputs.terraform_vars != '{}'
+      run: |
+        echo '${{ inputs.terraform_vars }}' | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' > terraform.tfvars
+
     - name: Terraform Plan
       id: plan
       run: |
-        terraform plan -input=false -detailed-exitcode
+        PLAN_ARGS="-input=false -detailed-exitcode"
+               
+        # Add generated tfvars if JSON vars were provided
+        if [ "${{ inputs.terraform_vars }}" != "{}" ] && [ -f terraform.tfvars ]; then
+          PLAN_ARGS="$PLAN_ARGS -var-file=terraform.tfvars"
+        fi
+        
+        terraform plan $PLAN_ARGS
         echo "exitcode=$?" >> $GITHUB_OUTPUT
       continue-on-error: true
       
@@ -103,5 +122,18 @@ jobs:
     - name: Terraform Init
       run: terraform init -input=false
 
+    - name: Generate Terraform Variables
+      if: inputs.terraform_vars != '{}'
+      run: |
+        echo '${{ inputs.terraform_vars }}' | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' > terraform.tfvars
+
     - name: Terraform Apply
-      run: terraform apply -auto-approve -input=false      
+      run: |
+        APPLY_ARGS="-auto-approve -input=false"
+               
+        # Add generated tfvars if JSON vars were provided
+        if [ "${{ inputs.terraform_vars }}" != "{}" ] && [ -f terraform.tfvars ]; then
+          APPLY_ARGS="$APPLY_ARGS -var-file=terraform.tfvars"
+        fi
+        
+        terraform apply $APPLY_ARGS    
