@@ -34,6 +34,14 @@ on:
 jobs:
   deploy:
     uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/terraform-template-creation-resource.yml@main
+    with:
+      terraform_vars: |
+      {
+        "environment": "${{secrets.ENVIRONMENT}}",
+        "region": "${{secrets.REGION}}",
+        "instance_count": "${{secrets.COUNT}}",
+        "enable_monitoring": "true"
+      }
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
