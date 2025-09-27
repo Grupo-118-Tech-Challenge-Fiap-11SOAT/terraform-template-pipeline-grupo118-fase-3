@@ -3,23 +3,11 @@ name: 'Reusable Terraform Creation Workflow'
 on:
   workflow_call:
     inputs:
-      terraform_vars:
-        description: 'JSON string of Terraform variables as key-value pairs'
-        required: false
+      terraform_var_mapping:
+        description: 'JSON mapping of terraform variables to secret names'
+        required: true
         type: string
-        default: '{}'      
-    secrets:
-      AZURE_CLIENT_ID:
-        required: true
-      AZURE_CLIENT_SECRET:
-        required: true
-      AZURE_SUBSCRIPTION_ID:
-        required: true
-      AZURE_TENANT_ID:
-        required: true
-      TF_API_TOKEN:
-        required: false
- 
+    secrets: {}  # No explicit secrets defined 
 
 env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -80,18 +68,38 @@ jobs:
     - name: Terraform Init
       run: terraform init -input=false
 
-    - name: Generate Terraform Variables
-      if: inputs.terraform_vars != '{}'
+    - name: Generate Terraform Variables from Secrets
+      env:
+        SECRETS_CONTEXT: ${{ toJson(secrets) }}
+        VAR_MAPPING: ${{ inputs.terraform_var_mapping }}
       run: |
-        echo '${{ inputs.terraform_vars }}' | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' > terraform.tfvars
+        # Create terraform.tfvars file
+        echo "# Generated Terraform variables from secrets" > terraform.tfvars
+        
+        # Parse the mapping and generate variables
+        echo "$VAR_MAPPING" | jq -r 'to_entries[] | "\(.key) \(.value)"' | while read tf_var secret_name; do
+          # Get the secret value from the secrets context
+          secret_value=$(echo "$SECRETS_CONTEXT" | jq -r --arg secret_name "$secret_name" '.[$secret_name] // empty')
+          
+          if [ -n "$secret_value" ] && [ "$secret_value" != "null" ]; then
+            echo "${tf_var} = \"${secret_value}\"" >> terraform.tfvars
+            echo "✓ Mapped secret '$secret_name' to terraform variable '$tf_var'"
+          else
+            echo "⚠️  Warning: Secret '$secret_name' not found or empty for terraform variable '$tf_var'"
+          fi
+        done
+        
+        echo "Generated terraform.tfvars:"
+        # Show tfvars without values for security
+        sed 's/=.*/= "[REDACTED]"/' terraform.tfvars
 
     - name: Terraform Plan
       id: plan
       run: |
         PLAN_ARGS="-input=false -detailed-exitcode"
-               
-        # Add generated tfvars if JSON vars were provided
-        if [ "${{ inputs.terraform_vars }}" != "{}" ] && [ -f terraform.tfvars ]; then
+        
+        # Add terraform.tfvars if it exists and has content
+        if [ -f terraform.tfvars ] && [ -s terraform.tfvars ]; then
           PLAN_ARGS="$PLAN_ARGS -var-file=terraform.tfvars"
         fi
         
@@ -122,18 +130,39 @@ jobs:
     - name: Terraform Init
       run: terraform init -input=false
 
-    - name: Generate Terraform Variables
-      if: inputs.terraform_vars != '{}'
+    - name: Generate Terraform Variables from Secrets
+      env:
+        SECRETS_CONTEXT: ${{ toJson(secrets) }}
+        VAR_MAPPING: ${{ inputs.terraform_var_mapping }}
       run: |
-        echo '${{ inputs.terraform_vars }}' | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' > terraform.tfvars
+        # Create terraform.tfvars file
+        echo "# Generated Terraform variables from secrets" > terraform.tfvars
+        
+        # Parse the mapping and generate variables
+        echo "$VAR_MAPPING" | jq -r 'to_entries[] | "\(.key) \(.value)"' | while read tf_var secret_name; do
+          # Get the secret value from the secrets context
+          secret_value=$(echo "$SECRETS_CONTEXT" | jq -r --arg secret_name "$secret_name" '.[$secret_name] // empty')
+          
+          if [ -n "$secret_value" ] && [ "$secret_value" != "null" ]; then
+            echo "${tf_var} = \"${secret_value}\"" >> terraform.tfvars
+            echo "✓ Mapped secret '$secret_name' to terraform variable '$tf_var'"
+          else
+            echo "⚠️  Warning: Secret '$secret_name' not found or empty for terraform variable '$tf_var'"
+          fi
+        done
+        
+        echo "Generated terraform.tfvars:"
+        # Show tfvars without values for security
+        sed 's/=.*/= "[REDACTED]"/' terraform.tfvars
 
     - name: Terraform Apply
+      id: apply
       run: |
-        APPLY_ARGS="-auto-approve -input=false"
-               
-        # Add generated tfvars if JSON vars were provided
-        if [ "${{ inputs.terraform_vars }}" != "{}" ] && [ -f terraform.tfvars ]; then
+        APPLY_ARGS="auto-approve -input=false"
+        
+        # Add terraform.tfvars if it exists and has content
+        if [ -f terraform.tfvars ] && [ -s terraform.tfvars ]; then
           APPLY_ARGS="$APPLY_ARGS -var-file=terraform.tfvars"
         fi
         
-        terraform apply $APPLY_ARGS    
+        terraform apply $APPLY_ARGS
