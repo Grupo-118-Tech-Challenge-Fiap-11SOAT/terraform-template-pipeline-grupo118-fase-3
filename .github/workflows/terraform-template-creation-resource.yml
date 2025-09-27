@@ -103,6 +103,8 @@ jobs:
           PLAN_ARGS="$PLAN_ARGS -var-file=terraform.tfvars"
         fi
         
+        echo "Running: terraform plan $PLAN_ARGS"
+
         terraform plan $PLAN_ARGS
         echo "exitcode=$?" >> $GITHUB_OUTPUT
       continue-on-error: true
@@ -164,5 +166,7 @@ jobs:
         if [ -f terraform.tfvars ] && [ -s terraform.tfvars ]; then
           APPLY_ARGS="$APPLY_ARGS -var-file=terraform.tfvars"
         fi
+
+        echo "Running: terraform apply $APPLY_ARGS"
         
         terraform apply $APPLY_ARGS
