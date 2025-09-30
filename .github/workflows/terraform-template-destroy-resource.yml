@@ -5,7 +5,7 @@ on:
     inputs:
       terraform_var_mapping:
         description: 'JSON mapping of terraform variables to secret names'
-        required: true
+        required: false
         type: string
         default: '{}'        
     secrets: {}  # No explicit secrets defined 
