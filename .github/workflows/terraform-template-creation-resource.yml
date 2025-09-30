@@ -160,7 +160,7 @@ jobs:
     - name: Terraform Apply
       id: apply
       run: |
-        APPLY_ARGS="auto-approve -input=false"
+        APPLY_ARGS="-auto-approve -input=false"
         
         # Add terraform.tfvars if it exists and has content
         if [ -f terraform.tfvars ] && [ -s terraform.tfvars ]; then

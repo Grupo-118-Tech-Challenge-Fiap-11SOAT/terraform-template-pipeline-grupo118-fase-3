@@ -57,6 +57,15 @@ on:
 jobs:
   destroy:
     uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/terraform-template-destroy-resource.yml@main
+    with:
+      terraform_var_mapping: |
+        {
+          "environment": "ENVIRONMENT",
+          "region": "AZURE_REGION",
+          "instance_count": "INSTANCE_COUNT",
+          "database_password": "DB_PASSWORD",
+          "api_key": "API_SECRET_KEY"
+        }
     secrets: inherit
 ```
 
