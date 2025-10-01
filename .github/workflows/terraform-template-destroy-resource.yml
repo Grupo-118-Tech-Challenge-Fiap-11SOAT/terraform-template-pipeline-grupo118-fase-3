@@ -43,11 +43,6 @@ jobs:
     - name: Terraform Init
       run: terraform init -input=false
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-
     - name: Generate Terraform Variables from Secrets
       env:
         SECRETS_CONTEXT: ${{ toJson(secrets) }}
