@@ -22,9 +22,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  pull-requests: write  # Required for PR comments
+  contents: read
+  issues: write  # Optional, for issue comments
+
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -51,9 +56,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  pull-requests: write  # Required for PR comments
+  contents: read
+  issues: write  # Optional, for issue comments
+
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -80,9 +90,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  pull-requests: write  # Required for PR comments
+  contents: read
+  issues: write  # Optional, for issue comments
+
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -109,9 +124,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  pull-requests: write  # Required for PR comments
+  contents: read
+  issues: write  # Optional, for issue comments
+
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -140,8 +160,9 @@ jobs:
 | `build-configuration` | Build configuration (Debug/Release) | **Yes** | `Release` |
 | `dockerfile-path` | Path to the Dockerfile | **Yes** | `./Dockerfile` |
 | `image-name` | Name of the Docker image to build | **Yes** | - |
+| `sonar-host-url` | SonarQube/SonarCloud server URL | No | `https://sonarcloud.io` |
 
-**Note:** All inputs are marked as `required: true` in the workflow. If you want to use default values, you must explicitly provide them or the workflow will fail.
+**Note:** All required inputs must be explicitly provided in your workflow, even if you want to use the default values.
 
 ## Required Secrets
 
@@ -155,6 +176,19 @@ All secrets must be configured in your repository settings:
 - `ACR_PASSWORD` - Azure Container Registry password
 - `ACR_REGISTRY` - Azure Container Registry login server (e.g., `yourregistry.azurecr.io`)
 
+## Required Permissions
+
+The workflow requires specific GitHub token permissions to function properly:
+
+```yaml
+permissions:
+  pull-requests: write  # Required for SonarCloud PR comments
+  contents: read        # Required to checkout code
+  issues: write         # Optional, for issue comments
+```
+
+These permissions are already configured in the reusable workflow, but ensure your organization/repository settings allow them.
+
 ## Pipeline Behavior
 
 ### Build and Analyze Job
@@ -164,13 +198,16 @@ This job runs on every push and pull request:
 1. **Checkout code** - Fetches the repository with full history for SonarCloud analysis
 2. **Setup .NET** - Installs the specified .NET SDK version
 3. **Cache dependencies** - Caches SonarCloud packages and NuGet packages for faster builds
-4. **Install SonarCloud scanner** - Installs the dotnet-sonarscanner tool
-5. **Restore dependencies** - Restores NuGet packages
-6. **SonarCloud Begin** - Initializes SonarCloud analysis with coverage settings
-7. **Build** - Compiles the solution with `--no-incremental` flag
-8. **Test with Coverage** - Runs tests and collects code coverage in OpenCover format (skipped if `test-projects` is empty)
-9. **SonarCloud End** - Finalizes and uploads analysis to SonarCloud
-10. **Upload coverage reports** - Saves test results as artifacts (only if tests were run)
+4. **Setup SonarCloud Project** - Configures the SonarCloud project using automated setup action
+5. **Install SonarCloud scanner** - Installs the dotnet-sonarscanner tool
+6. **Restore dependencies** - Restores NuGet packages
+7. **SonarCloud Begin** - Initializes SonarCloud analysis with coverage settings
+   - For **Pull Requests**: Configures PR decoration with automatic comments
+   - For **Branches**: Configures branch-specific analysis
+8. **Build** - Compiles the solution with `--no-incremental` flag
+9. **Test with Coverage** - Runs tests and collects code coverage in OpenCover format (skipped if `test-projects` is empty)
+10. **SonarCloud End** - Finalizes and uploads analysis to SonarCloud
+11. **Upload coverage reports** - Saves test results as artifacts (only if tests were run)
 
 ### Build Docker Job
 
@@ -186,28 +223,82 @@ This job runs after successful build and analysis:
 - Logs in to Azure Container Registry
 - Pushes the image with multiple tags:
   - Branch name (e.g., `main`, `develop`)
-  - Git SHA
+  - Git SHA (e.g., `sha-abc123`)
   - `latest` (only for default branch)
   - Date stamp (for scheduled builds)
 
 ## SonarCloud Configuration
 
-The pipeline is pre-configured with the following SonarCloud settings:
+### Automatic Pull Request Decoration
+
+The pipeline automatically configures SonarCloud to post analysis results as comments on Pull Requests, including:
+
+- ✅ **Quality Gate Status** (Passed/Failed)
+- 📊 **Coverage** percentage and change
+- 🐛 **New Issues** count (Bugs, Vulnerabilities, Code Smells)
+- 🔒 **Security Hotspots**
+- 💯 **Maintainability Rating**
+- 🔗 **Link to full analysis** on SonarCloud
+
+**PR Comment Example:**
+
+![SonarCloud PR Comment](https://docs.sonarcloud.io/assets/images/pr-decoration-github.png)
+
+### Analysis Modes
+
+The pipeline intelligently detects the context and runs different analysis modes:
+
+#### Pull Request Analysis
+- Analyzes only the code changes in the PR
+- Compares against the target branch
+- Posts quality gate results as PR comments
+- Shows new issues introduced by the PR
+- Uses parameters:
+  - `sonar.pullrequest.key`
+  - `sonar.pullrequest.branch`
+  - `sonar.pullrequest.base`
+  - `sonar.pullrequest.github.summary_comment=true`
+
+#### Branch Analysis
+- Analyzes the complete branch state
+- Tracks metrics over time
+- Updates the main project dashboard
+- Uses parameter:
+  - `sonar.branch.name`
+
+### Coverage and Quality Settings
+
+The pipeline is pre-configured with:
 
 - **Coverage Format**: OpenCover XML
 - **Test Results**: TRX format
-- **Coverage Exclusions**: Test files (`**/*Tests.cs`, `**/*Test.cs`)
-- **General Exclusions**: Coverage reports and test results directories (`**/coverage.opencover.xml`, `**/TestResults/**`)
-- **Test Inclusions**: Test files for proper categorization
+- **Coverage Exclusions**: Test files (`**/*Tests/**`, `**/*Test/**`), `Program.cs`, `Migrations/**`
+- **General Exclusions**: `**/TestResults/**`, `**/bin/**`, `**/obj/**`
+- **Test Inclusions**: `**/*Tests/**`, `**/*Test/**`
+- **Quality Gate Wait**: Enabled (pipeline waits for SonarCloud quality gate result)
 
 ## Code Coverage
 
 Code coverage is collected using:
 - **XPlat Code Coverage** collector
 - **OpenCover** format for SonarCloud compatibility
+- **Coverage path pattern**: `**/TestResults/**/coverage.opencover.xml`
 - Results stored in `TestResults` directory
 - Uploaded as GitHub Actions artifacts (available for 90 days)
 - Can be skipped by providing an empty string for `test-projects`
+
+### Ensuring Coverage is Collected
+
+Make sure your test projects include the coverlet.collector package:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="coverlet.collector" Version="6.0.0">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
+</ItemGroup>
+```
 
 ## Docker Build Features
 
@@ -227,6 +318,13 @@ Before using this workflow, ensure:
 - Note your project key and organization
 - Generate an authentication token
 - Add the token to your repository secrets as `SONAR_TOKEN`
+- **Install SonarCloud GitHub App**:
+  1. Go to https://github.com/apps/sonarcloud
+  2. Click "Configure"
+  3. Select your organization
+  4. Grant access to your repository
+  
+  This is required for PR decoration to work!
 
 ### 2. Azure Container Registry
 - Create an ACR instance in Azure
@@ -251,6 +349,7 @@ Add all required secrets to your repository:
 ### 5. Test Projects (Optional)
 - Test projects should follow the naming convention `*Tests.csproj`
 - Or specify custom paths in `test-projects` input (space-separated)
+- Ensure `coverlet.collector` package is installed for coverage
 - Set `test-projects: ""` to skip tests entirely
 
 ## Troubleshooting
@@ -277,12 +376,36 @@ with:
 - Verify your `SONAR_TOKEN` is valid and not expired
 - Check that the project key and organization match your SonarCloud setup
 - Ensure fetch-depth is set to 0 for proper analysis
+- Verify the SonarCloud GitHub App is installed on your repository
+
+#### Issue: PR comments not showing
+**Solution:**
+1. Install the SonarCloud GitHub App: https://github.com/apps/sonarcloud
+2. Verify the workflow has `pull-requests: write` permission
+3. Check SonarCloud project settings → Pull Requests → Enable PR decoration
+4. Ensure `GITHUB_TOKEN` is properly passed to the workflow
+5. Check the workflow logs for SonarCloud errors
+
+#### Issue: Code coverage not showing in SonarCloud
+**Solution:**
+- Ensure `coverlet.collector` package is installed in test projects
+- Verify test projects are being discovered (check workflow logs)
+- Check that coverage files are generated in `TestResults` directory
+- Verify the coverage path pattern: `**/TestResults/**/coverage.opencover.xml`
+- Add the debug step to see generated files:
+  ```yaml
+  - name: Debug - List coverage files
+    run: find . -name "coverage.opencover.xml" -ls
+  ```
 
 #### Issue: Tests fail or coverage not collected
 **Solution:**
 - Verify test projects match the `test-projects` pattern
 - Check that test projects have proper test framework packages installed (xUnit, NUnit, or MSTest)
-- Ensure coverlet.collector package is installed in test projects
+- Ensure coverlet.collector package is installed in test projects:
+  ```bash
+  dotnet add package coverlet.collector
+  ```
 - If you don't have tests, set `test-projects: ""`
 
 #### Issue: Docker push fails
@@ -292,24 +415,26 @@ with:
 - Check that you're pushing from `main` or `develop` branch
 - Verify the ACR allows pushes from your IP/network
 
-#### Issue: Job dependency error - "build-dotnet" not found
+#### Issue: Wrong branch detected in analysis
 **Solution:**
-There's a bug in the workflow file. The `build-docker` job references `needs: build-dotnet` but the actual job name is `build-and-analyze`. This needs to be fixed in the template:
-```yaml
-build-docker:
-  needs: build-and-analyze  # Should be this instead of build-dotnet
-```
+The workflow now automatically detects the correct branch using:
+- `github.ref_name` for branch pushes
+- `github.head_ref` and `github.base_ref` for pull requests
+
+No manual configuration is needed!
 
 ## Best Practices
 
 1. **All Inputs Required**: Remember that all inputs are marked as required, so you must provide values even for defaults
 2. **Branch Strategy**: The workflow is optimized for `main` and `develop` branches
 3. **Pull Requests**: Always test in PRs before merging - Docker images won't be pushed
-4. **Secrets Rotation**: Regularly rotate ACR credentials and SonarCloud tokens
-5. **Cache Usage**: The workflow uses caching to speed up builds - first runs may be slower
-6. **Coverage Goals**: Set up quality gates in SonarCloud for minimum coverage requirements
-7. **Test Projects**: Use space-separated paths for multiple test projects, or empty string to skip
-8. **Build Configuration**: Use `Release` configuration for production builds
+4. **SonarCloud GitHub App**: Install it to enable PR decoration
+5. **Secrets Rotation**: Regularly rotate ACR credentials and SonarCloud tokens
+6. **Cache Usage**: The workflow uses caching to speed up builds - first runs may be slower
+7. **Coverage Goals**: Set up quality gates in SonarCloud for minimum coverage requirements
+8. **Test Projects**: Use space-separated paths for multiple test projects, or empty string to skip
+9. **Build Configuration**: Use `Release` configuration for production builds
+10. **Monitor PR Comments**: Review SonarCloud feedback on every PR before merging
 
 ## Pipeline Outputs
 
@@ -318,10 +443,17 @@ build-docker:
 
 ### Docker Tags
 Generated tags follow this pattern:
-- `branch-name` (e.g., `main`, `develop`)
+- `{branch-name}` (e.g., `main`, `develop`)
 - `sha-{git-sha}` (e.g., `sha-abc123`)
 - `latest` (only for default branch)
-- `YYYYMMDD` (for scheduled builds on default branch)
+- `{YYYYMMDD}` (for scheduled builds on default branch)
+
+### SonarCloud Results
+- Analysis results available on SonarCloud dashboard
+- PR decoration comments on pull requests
+- Quality gate status checks
+- Code coverage metrics
+- Security vulnerability reports
 
 ## Example Repository Structure
 
@@ -332,13 +464,47 @@ your-repo/
 │       └── ci.yml                 # Your workflow calling this template
 ├── src/
 │   ├── YourProject/
-│   │   └── YourProject.csproj
+│   │   ├── YourProject.csproj
+│   │   └── Program.cs
 │   └── YourSolution.sln
 ├── tests/
 │   └── YourProject.Tests/
-│       └── YourProject.Tests.csproj
+│       ├── YourProject.Tests.csproj  # Include coverlet.collector
+│       └── UnitTest1.cs
 ├── Dockerfile
 └── README.md
+```
+
+## Advanced Configuration
+
+### Custom SonarCloud Host
+
+If you're using a self-hosted SonarQube instance:
+
+```yaml
+with:
+  sonar-host-url: "https://sonarqube.yourcompany.com"
+  # ... other inputs
+```
+
+### Multiple Test Projects
+
+Space-separate multiple test project paths:
+
+```yaml
+with:
+  test-projects: "./tests/Unit.Tests/Unit.Tests.csproj ./tests/Integration.Tests/Integration.Tests.csproj"
+  # ... other inputs
+```
+
+### Wildcard Pattern for Tests
+
+Use glob patterns to match multiple test projects:
+
+```yaml
+with:
+  test-projects: "**/*.Tests.csproj"  # Matches any .Tests.csproj file
+  # ... other inputs
 ```
 
 ## Additional Notes
@@ -350,10 +516,23 @@ your-repo/
 - The `--no-incremental` flag is used in the build step to ensure clean builds for SonarCloud analysis
 - Test projects can be specified as wildcards (`**/*Tests.csproj`) or explicit paths
 - Set `test-projects: ""` to skip test execution entirely
+- SonarCloud automatically detects PR vs branch context - no manual configuration needed
+- PR decoration requires the SonarCloud GitHub App to be installed
 
-## Known Issues
+## SonarCloud Quality Gates
 
-1. **Job Dependency Bug**: The `build-docker` job references `needs: build-dotnet` but should reference `needs: build-and-analyze`
+Configure quality gates in SonarCloud to enforce code quality standards:
+
+1. Go to your project in SonarCloud
+2. Navigate to Quality Gates
+3. Set thresholds for:
+   - Code Coverage (e.g., minimum 80%)
+   - Duplicated Lines
+   - Maintainability Rating
+   - Reliability Rating
+   - Security Rating
+
+The pipeline will wait for the quality gate result and fail if conditions are not met.
 
 ## Support
 
@@ -361,7 +540,17 @@ For issues or questions:
 1. Check the [GitHub Actions documentation](https://docs.github.com/en/actions)
 2. Review [SonarCloud documentation](https://docs.sonarcloud.io/)
 3. Check [Docker documentation](https://docs.docker.com/)
-4. Open an issue in this repository
+4. Review [SonarCloud PR Decoration](https://docs.sonarcloud.io/enriching/pr-decoration/)
+5. Open an issue in this repository
+
+## Contributing
+
+Contributions to improve this template are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
