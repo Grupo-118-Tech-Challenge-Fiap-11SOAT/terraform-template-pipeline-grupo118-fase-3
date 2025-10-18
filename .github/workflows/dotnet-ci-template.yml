@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: 'https://sonarcloud.io'
+      default-branch:
+        description: 'Default branch name for the repository'
+        required: false
+        type: string
+        default: 'main'
     secrets:
       SONAR_TOKEN:
         description: 'SonarCloud authentication token'
@@ -127,6 +132,7 @@ jobs:
             /d:sonar.exclusions="**/TestResults/**,**/bin/**,**/obj/**"
             /d:sonar.test.inclusions="**/*Tests/**,**/*Test/**"
             /d:sonar.qualitygate.wait=true
+            /d:sonar.newCode.referenceBranch="${{ inputs.default-branch }}"
           )
           
           # Add PR-specific or branch-specific parameters
