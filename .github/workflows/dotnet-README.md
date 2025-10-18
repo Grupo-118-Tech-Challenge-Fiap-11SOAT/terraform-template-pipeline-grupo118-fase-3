@@ -24,7 +24,7 @@ on:
 
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -53,7 +53,7 @@ on:
 
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -82,7 +82,7 @@ on:
 
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
@@ -111,7 +111,7 @@ on:
 
 jobs:
   ci:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-ci-template.yml@main
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
