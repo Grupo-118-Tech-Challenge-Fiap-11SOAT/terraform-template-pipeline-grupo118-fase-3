@@ -12,7 +12,7 @@ The pipeline consists of two main jobs:
 
 To use this reusable workflow in your .NET repository, create a workflow file that calls it:
 
-### Basic Example
+### Basic Example (Minimum Required)
 
 ```yaml
 name: CI/CD Pipeline
@@ -28,17 +28,20 @@ jobs:
     with:
       sonar-project-key: "your-org_your-repo"
       sonar-organization: "your-organization"
+      solution-path: "."
+      test-projects: "**/*Tests.csproj"
+      dotnet-version: "8.0.x"
+      build-configuration: "Release"
+      dockerfile-path: "./Dockerfile"
+      image-name: "my-app-name"
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
       ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
-    env:
-      REGISTRY: ${{ secrets.ACR_REGISTRY }}
-      IMAGE_NAME: my-app-name
 ```
 
-### Advanced Example with Custom Configuration
+### Example with Custom Paths
 
 ```yaml
 name: CI/CD Pipeline
@@ -59,14 +62,70 @@ jobs:
       dotnet-version: "8.0.x"
       build-configuration: "Release"
       dockerfile-path: "./src/Dockerfile"
+      image-name: "my-custom-app"
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
       ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
-    env:
-      REGISTRY: ${{ secrets.ACR_REGISTRY }}
-      IMAGE_NAME: my-custom-app
+```
+
+### Example with Different .NET Version
+
+```yaml
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    with:
+      sonar-project-key: "your-org_your-repo"
+      sonar-organization: "your-organization"
+      solution-path: "."
+      test-projects: "**/*Tests.csproj"
+      dotnet-version: "9.0.x"
+      build-configuration: "Release"
+      dockerfile-path: "./Dockerfile"
+      image-name: "dotnet9-app"
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+```
+
+### Example Without Tests (SonarCloud Analysis Only)
+
+```yaml
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet/ci-template.yml@main
+    with:
+      sonar-project-key: "your-org_your-repo"
+      sonar-organization: "your-organization"
+      solution-path: "."
+      test-projects: ""  # Empty string to skip tests
+      dotnet-version: "8.0.x"
+      build-configuration: "Release"
+      dockerfile-path: "./Dockerfile"
+      image-name: "my-app"
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
 ```
 
 ## Required Inputs
@@ -75,11 +134,14 @@ jobs:
 |-------|-------------|----------|---------|
 | `sonar-project-key` | SonarCloud project key (e.g., `org_repo-name`) | **Yes** | - |
 | `sonar-organization` | SonarCloud organization key | **Yes** | - |
-| `solution-path` | Path to the solution file | No | `.` |
-| `test-projects` | Space-separated list of test project paths | No | `**/*Tests.csproj` |
-| `dotnet-version` | .NET SDK version to use | No | `8.0.x` |
-| `build-configuration` | Build configuration (Debug/Release) | No | `Release` |
-| `dockerfile-path` | Path to the Dockerfile | No | `./Dockerfile` |
+| `solution-path` | Path to the solution file | **Yes** | `.` |
+| `test-projects` | Space-separated list of test project paths (empty string to skip tests) | **Yes** | `**/*Tests.csproj` |
+| `dotnet-version` | .NET SDK version to use | **Yes** | `8.0.x` |
+| `build-configuration` | Build configuration (Debug/Release) | **Yes** | `Release` |
+| `dockerfile-path` | Path to the Dockerfile | **Yes** | `./Dockerfile` |
+| `image-name` | Name of the Docker image to build | **Yes** | - |
+
+**Note:** All inputs are marked as `required: true` in the workflow. If you want to use default values, you must explicitly provide them or the workflow will fail.
 
 ## Required Secrets
 
@@ -92,18 +154,6 @@ All secrets must be configured in your repository settings:
 - `ACR_USERNAME` - Azure Container Registry username
 - `ACR_PASSWORD` - Azure Container Registry password
 - `ACR_REGISTRY` - Azure Container Registry login server (e.g., `yourregistry.azurecr.io`)
-
-## Required Environment Variables (for Docker Build)
-
-When calling this workflow, you **must** define the following environment variables:
-
-```yaml
-env:
-  REGISTRY: ${{ secrets.ACR_REGISTRY }}
-  IMAGE_NAME: your-image-name  # Change this to your desired image name
-```
-
-**Note:** These variables are required for the Docker metadata step. Without them, the `build-docker` job will fail.
 
 ## Pipeline Behavior
 
@@ -118,9 +168,9 @@ This job runs on every push and pull request:
 5. **Restore dependencies** - Restores NuGet packages
 6. **SonarCloud Begin** - Initializes SonarCloud analysis with coverage settings
 7. **Build** - Compiles the solution with `--no-incremental` flag
-8. **Test with Coverage** - Runs tests and collects code coverage in OpenCover format
+8. **Test with Coverage** - Runs tests and collects code coverage in OpenCover format (skipped if `test-projects` is empty)
 9. **SonarCloud End** - Finalizes and uploads analysis to SonarCloud
-10. **Upload coverage reports** - Saves test results as artifacts
+10. **Upload coverage reports** - Saves test results as artifacts (only if tests were run)
 
 ### Build Docker Job
 
@@ -157,6 +207,7 @@ Code coverage is collected using:
 - **OpenCover** format for SonarCloud compatibility
 - Results stored in `TestResults` directory
 - Uploaded as GitHub Actions artifacts (available for 90 days)
+- Can be skipped by providing an empty string for `test-projects`
 
 ## Docker Build Features
 
@@ -197,13 +248,29 @@ Add all required secrets to your repository:
 - Ensure your project has a valid Dockerfile
 - Place it at the root or specify the path in `dockerfile-path` input
 
-### 5. Test Projects
+### 5. Test Projects (Optional)
 - Test projects should follow the naming convention `*Tests.csproj`
 - Or specify custom paths in `test-projects` input (space-separated)
+- Set `test-projects: ""` to skip tests entirely
 
 ## Troubleshooting
 
 ### Common Issues
+
+#### Issue: Workflow fails with "required input not provided"
+**Solution:**
+All inputs are marked as required in the workflow definition. You must provide values for all inputs, even if you want to use the defaults:
+```yaml
+with:
+  sonar-project-key: "your-org_your-repo"
+  sonar-organization: "your-organization"
+  solution-path: "."  # Explicitly provide default
+  test-projects: "**/*Tests.csproj"  # Explicitly provide default
+  dotnet-version: "8.0.x"  # Explicitly provide default
+  build-configuration: "Release"  # Explicitly provide default
+  dockerfile-path: "./Dockerfile"  # Explicitly provide default
+  image-name: "my-app"  # Must provide
+```
 
 #### Issue: SonarCloud analysis fails
 **Solution:**
@@ -211,20 +278,12 @@ Add all required secrets to your repository:
 - Check that the project key and organization match your SonarCloud setup
 - Ensure fetch-depth is set to 0 for proper analysis
 
-#### Issue: Docker build fails with metadata error
-**Solution:**
-Ensure `REGISTRY` and `IMAGE_NAME` environment variables are set in your calling workflow:
-```yaml
-env:
-  REGISTRY: ${{ secrets.ACR_REGISTRY }}
-  IMAGE_NAME: my-app
-```
-
 #### Issue: Tests fail or coverage not collected
 **Solution:**
 - Verify test projects match the `test-projects` pattern
 - Check that test projects have proper test framework packages installed (xUnit, NUnit, or MSTest)
 - Ensure coverlet.collector package is installed in test projects
+- If you don't have tests, set `test-projects: ""`
 
 #### Issue: Docker push fails
 **Solution:**
@@ -233,28 +292,29 @@ env:
 - Check that you're pushing from `main` or `develop` branch
 - Verify the ACR allows pushes from your IP/network
 
-#### Issue: "build-dotnet" job not found
+#### Issue: Job dependency error - "build-dotnet" not found
 **Solution:**
-This is a typo in the workflow. The job is named `build-and-analyze`, but the Docker job references `build-dotnet`. You should report this issue or the workflow needs to be fixed:
+There's a bug in the workflow file. The `build-docker` job references `needs: build-dotnet` but the actual job name is `build-and-analyze`. This needs to be fixed in the template:
 ```yaml
 build-docker:
-  needs: build-and-analyze  # Change from build-dotnet
+  needs: build-and-analyze  # Should be this instead of build-dotnet
 ```
 
 ## Best Practices
 
-1. **Branch Strategy**: The workflow is optimized for `main` and `develop` branches
-2. **Pull Requests**: Always test in PRs before merging - Docker images won't be pushed
-3. **Secrets Rotation**: Regularly rotate ACR credentials and SonarCloud tokens
-4. **Cache Usage**: The workflow uses caching to speed up builds - first runs may be slower
-5. **Coverage Goals**: Set up quality gates in SonarCloud for minimum coverage requirements
-6. **Test Projects**: Use space-separated paths for multiple test projects
-7. **Build Configuration**: Use `Release` configuration for production builds
+1. **All Inputs Required**: Remember that all inputs are marked as required, so you must provide values even for defaults
+2. **Branch Strategy**: The workflow is optimized for `main` and `develop` branches
+3. **Pull Requests**: Always test in PRs before merging - Docker images won't be pushed
+4. **Secrets Rotation**: Regularly rotate ACR credentials and SonarCloud tokens
+5. **Cache Usage**: The workflow uses caching to speed up builds - first runs may be slower
+6. **Coverage Goals**: Set up quality gates in SonarCloud for minimum coverage requirements
+7. **Test Projects**: Use space-separated paths for multiple test projects, or empty string to skip
+8. **Build Configuration**: Use `Release` configuration for production builds
 
 ## Pipeline Outputs
 
 ### Artifacts
-- **coverage-reports**: Test results and code coverage reports (available for 90 days)
+- **coverage-reports**: Test results and code coverage reports (available for 90 days, only if tests were run)
 
 ### Docker Tags
 Generated tags follow this pattern:
@@ -289,6 +349,11 @@ your-repo/
 - All test results and coverage reports are uploaded as artifacts for review
 - The `--no-incremental` flag is used in the build step to ensure clean builds for SonarCloud analysis
 - Test projects can be specified as wildcards (`**/*Tests.csproj`) or explicit paths
+- Set `test-projects: ""` to skip test execution entirely
+
+## Known Issues
+
+1. **Job Dependency Bug**: The `build-docker` job references `needs: build-dotnet` but should reference `needs: build-and-analyze`
 
 ## Support
 

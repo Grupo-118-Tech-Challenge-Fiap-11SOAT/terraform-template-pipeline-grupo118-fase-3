@@ -13,29 +13,33 @@ on:
         type: string
       solution-path:
         description: 'Path to the solution file (e.g., ./src/MySolution.sln)'
-        required: false
+        required: true
         type: string
         default: '.'
       test-projects:
         description: 'Space-separated list of test project paths (e.g., "./tests/Project1.Tests/Project1.Tests.csproj ./tests/Project2.Tests/Project2.Tests.csproj")'
-        required: false
+        required: true
         type: string
         default: '**/*Tests.csproj'
       dotnet-version:
         description: '.NET SDK version to use'
-        required: false
+        required: true
         type: string
         default: '8.0.x'
       build-configuration:
         description: 'Build configuration (Debug/Release)'
-        required: false
+        required: true
         type: string
         default: 'Release'
-        dockerfile-path:
-          description: 'Path to the Dockerfile'
-          required: false
-          type: string
-          default: './Dockerfile'
+      dockerfile-path:
+        description: 'Path to the Dockerfile'
+        required: true
+        type: string
+        default: './Dockerfile'
+      image-name:
+        description: 'Name of the Docker image to build'
+        required: true
+        type: string
     secrets:
       SONAR_TOKEN:
         description: 'SonarCloud authentication token'
@@ -144,7 +148,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: ${{ secrets.ACR_REGISTRY }}/${{ inputs.image-name }}
         tags: |
           type=ref,event=branch
           type=sha
