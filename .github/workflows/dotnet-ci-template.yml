@@ -40,6 +40,11 @@ on:
         description: 'Name of the Docker image to build'
         required: true
         type: string
+      default-branch:
+        description: 'Default branch name for the repository'
+        required: true
+        type: string
+        default: 'main'
     secrets:
       SONAR_TOKEN:
         description: 'SonarCloud authentication token'
@@ -99,6 +104,7 @@ jobs:
           dotnet sonarscanner begin \
             /k:"${{ inputs.sonar-project-key }}" \
             /o:"${{ inputs.sonar-organization }}" \
+            /d:sonar.branch.name="${{ inputs.default-branch }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml" \
