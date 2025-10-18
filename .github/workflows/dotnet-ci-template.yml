@@ -134,7 +134,7 @@ jobs:
           path: ./TestResults
 
   build-docker:
-    needs: build-dotnet
+    needs: build-and-analyze
     runs-on: ubuntu-latest
     
     steps:
