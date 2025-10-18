@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: 'main'
+      sonar-host-url:
+        description: 'SonarQube server URL'
+        required: false
+        type: string
+        default: 'https://sonarcloud.io'
     secrets:
       SONAR_TOKEN:
         description: 'SonarCloud authentication token'
@@ -90,6 +95,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
       
+      - name: Setup SonarCloud Project
+        uses: nelsoncanarinho/setup-sonar@v1.0.0
+        with:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_NAME: ${{ inputs.sonar-project-key }}
+          SONAR_PROJECT_KEY: ${{ inputs.sonar-project-key }}
+          SONAR_ORGANIZATION: ${{ inputs.sonar-organization }}
+          SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+
       - name: Install SonarCloud scanner
         run: dotnet tool install --global dotnet-sonarscanner
       
@@ -106,7 +120,7 @@ jobs:
             /o:"${{ inputs.sonar-organization }}" \
             /d:sonar.branch.name="${{ inputs.default-branch }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
-            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.host.url="${{ inputs.sonar-host-url }}" \
             /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="**/*.trx" \
             /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs" \
