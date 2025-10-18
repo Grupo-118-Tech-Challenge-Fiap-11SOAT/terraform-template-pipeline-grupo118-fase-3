@@ -116,10 +116,10 @@ jobs:
             /o:"${{ inputs.sonar-organization }}"
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
             /d:sonar.host.url="${{ inputs.sonar-host-url }}"
-            /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml"
-            /d:sonar.cs.vstest.reportsPaths="**/*.trx"
-            /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs"
-            /d:sonar.exclusions="**/coverage.opencover.xml,**/TestResults/**"
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+            /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx"
+            /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs,**/Program.cs"
+            /d:sonar.exclusions="**/TestResults/**,**/bin/**,**/obj/**"
             /d:sonar.test.inclusions="**/*Tests.cs,**/*Test.cs"
             /d:sonar.qualitygate.wait=true
           )
@@ -160,13 +160,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
-      
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-reports
-          path: ./TestResults
 
   build-docker:
     needs: build-and-analyze
