@@ -63,7 +63,11 @@ jobs:
   build-and-analyze:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    
+    permissions:
+      pull-requests: write  # Required for PR comments
+      contents: read
+      issues: write  # Optional, for issue comments
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -131,6 +135,8 @@ jobs:
               /d:sonar.pullrequest.key="${{ github.event.pull_request.number }}"
               /d:sonar.pullrequest.branch="${{ github.head_ref }}"
               /d:sonar.pullrequest.base="${{ github.base_ref }}"
+              /d:sonar.pullrequest.github.summary_comment="true"
+              /d:sonar.pullrequest.github.repository="${{ github.repository }}"
             )
           else
             echo "🔍 Analyzing Branch: ${{ github.ref_name }}"
