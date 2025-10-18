@@ -40,11 +40,6 @@ on:
         description: 'Name of the Docker image to build'
         required: true
         type: string
-      default-branch:
-        description: 'Default branch name for the repository'
-        required: false
-        type: string
-        default: 'main'
       sonar-host-url:
         description: 'SonarQube server URL'
         required: false
@@ -115,17 +110,35 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          dotnet sonarscanner begin \
-            /k:"${{ inputs.sonar-project-key }}" \
-            /o:"${{ inputs.sonar-organization }}" \
-            /d:sonar.branch.name="${{ inputs.default-branch }}" \
-            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
-            /d:sonar.host.url="${{ inputs.sonar-host-url }}" \
-            /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml" \
-            /d:sonar.cs.vstest.reportsPaths="**/*.trx" \
-            /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs" \
-            /d:sonar.exclusions="**/coverage.opencover.xml,**/TestResults/**" \
-            /d:sonar.test.inclusions="**/*Tests.cs,**/*Test.cs"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "Running SonarCloud analysis for Pull Request #${{ github.event.pull_request.number }}"
+            dotnet sonarscanner begin \
+              /k:"${{ inputs.sonar-project-key }}" \
+              /o:"${{ inputs.sonar-organization }}" \
+              /d:sonar.pullrequest.key="${{ github.event.pull_request.number }}" \
+              /d:sonar.pullrequest.branch="${{ github.head_ref }}" \
+              /d:sonar.pullrequest.base="${{ github.base_ref }}" \
+              /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+              /d:sonar.host.url="${{ inputs.sonar-host-url }}" \
+              /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml" \
+              /d:sonar.cs.vstest.reportsPaths="**/*.trx" \
+              /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs" \
+              /d:sonar.exclusions="**/coverage.opencover.xml,**/TestResults/**" \
+              /d:sonar.test.inclusions="**/*Tests.cs,**/*Test.cs"
+          else
+            echo "Running SonarCloud analysis for branch: ${{ github.ref_name }}"
+            dotnet sonarscanner begin \
+              /k:"${{ inputs.sonar-project-key }}" \
+              /o:"${{ inputs.sonar-organization }}" \
+              /d:sonar.branch.name="${{ github.ref_name }}" \
+              /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+              /d:sonar.host.url="${{ inputs.sonar-host-url }}" \
+              /d:sonar.cs.opencover.reportsPaths="./**/TestResults/**/coverage.opencover.xml" \
+              /d:sonar.cs.vstest.reportsPaths="**/*.trx" \
+              /d:sonar.coverage.exclusions="**/*Tests.cs,**/*Test.cs" \
+              /d:sonar.exclusions="**/coverage.opencover.xml,**/TestResults/**" \
+              /d:sonar.test.inclusions="**/*Tests.cs,**/*Test.cs"
+          fi
       
       - name: Build
         run: dotnet build ${{ inputs.solution-path }} --no-restore --configuration ${{ inputs.build-configuration }} --no-incremental
