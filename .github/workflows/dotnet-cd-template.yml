@@ -47,9 +47,9 @@ jobs:
               with:
                 version: '3.12.0'      
 
-            - name: Get AKS credentials
-              run: |
-                az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
+            # - name: Get AKS credentials
+            #   run: |
+            #     az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
 
 ## TODO: Validate Behavior
             - name: Process Helm values with secrets and variables
@@ -107,15 +107,15 @@ jobs:
               run: |
                 helm registry login ${{ secrets.DOCKER_REGISTRY }} --username ${{ secrets.ACR_USERNAME }} --password ${{ secrets.ACR_PASSWORD }}
 
-            - name: Deploy to Kubernetes
-              run: |
-                helm upgrade --install ${{ inputs.helm_chart_name }} \
-                oci://${{ secrets.DOCKER_REGISTRY }}/helm/${{ inputs.helm_chart_name }} \
-                --version ${{ inputs.helm_chart_version }} \
-                --namespace default \
-                --create-namespace \
-                --values values-processed.yaml \
-                --timeout=10m \
+            # - name: Deploy to Kubernetes
+            #   run: |
+            #     helm upgrade --install ${{ inputs.helm_chart_name }} \
+            #     oci://${{ secrets.DOCKER_REGISTRY }}/helm/${{ inputs.helm_chart_name }} \
+            #     --version ${{ inputs.helm_chart_version }} \
+            #     --namespace default \
+            #     --create-namespace \
+            #     --values values-processed.yaml \
+            #     --timeout=10m \
 
             - name: Clean up temporary files
               if: always()
