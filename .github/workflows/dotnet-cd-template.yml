@@ -48,6 +48,8 @@ jobs:
 
 ## TODO: Validate Behavior
             - name: Process Helm values with secrets
+              env:
+                SECRETS_JSON: ${{ toJSON(secrets) }}
               run: |
                 # Check if values file exists
                 if [ ! -f "${{ inputs.helm_values_file }}" ]; then
@@ -55,20 +57,39 @@ jobs:
                   exit 1
                 fi
                 
-                # Parse secrets mapping and export variables
-                echo '${{ inputs.secrets_mapping }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > export_vars.sh
+                # Create a script to resolve secret names to values
+                cat > resolve_secrets.sh <<'SCRIPT'
+                #!/bin/bash
+                SECRETS_MAPPING='${{ inputs.secrets_mapping }}'
+                
+                # Parse the mapping and export variables with secret values
+                echo "$SECRETS_MAPPING" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS='=' read -r var_name secret_name; do
+                  # Get secret value from SECRETS_JSON using jq
+                  secret_value=$(echo "$SECRETS_JSON" | jq -r --arg key "$secret_name" '.[$key] // ""')
+                  
+                  if [ -z "$secret_value" ]; then
+                    echo "Warning: Secret '$secret_name' not found for variable '$var_name'"
+                  fi
+                  
+                  # Export the variable
+                  echo "export ${var_name}=\"${secret_value}\""
+                done > export_vars.sh
+                SCRIPT
+                
+                chmod +x resolve_secrets.sh
+                ./resolve_secrets.sh
                 
                 # Source the exports
                 source export_vars.sh
                 
-                # Replace secrets in values file using envsubst
+                # Replace variables in values file using envsubst
                 envsubst < ${{ inputs.helm_values_file }} > values-processed.yaml
                 
                 echo "Processed Helm values:"
                 cat values-processed.yaml
                 
                 # Clean up
-                rm -f export_vars.sh
+                rm -f export_vars.sh resolve_secrets.sh
 ##
 
             - name: Log in to Azure Container Registry
