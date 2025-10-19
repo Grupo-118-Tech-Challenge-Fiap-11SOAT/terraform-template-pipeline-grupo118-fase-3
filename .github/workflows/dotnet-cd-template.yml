@@ -66,7 +66,7 @@ jobs:
                 
                 # Process common variables (non-secrets)
                 echo '${{ inputs.variables_mapping }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS='=' read -r var_name var_value; do
-                  echo "Setting variable: ${var_name}"
+                  echo "Setting variable: ${var_name}" >&2
                   echo "export ${var_name}=\"${var_value}\""
                 done > export_vars.sh
                 
@@ -81,7 +81,7 @@ jobs:
                   if [ -z "$secret_value" ]; then
                     echo "Warning: Secret '$secret_name' not found for variable '$var_name'" >&2
                   else
-                    echo "Setting secret variable: ${var_name} (from secret: ${secret_name})"
+                    echo "Setting secret variable: ${var_name} (from secret: ${secret_name})" >&2
                     echo "export ${var_name}=\"${secret_value}\""
                   fi
                 done >> export_vars.sh
@@ -101,7 +101,7 @@ jobs:
                 cat values-processed.yaml
                 
                 # Clean up
-                rm -f export_vars.sh##
+                rm -f export_vars.sh
 
             - name: Log in to Azure Container Registry
               run: |
