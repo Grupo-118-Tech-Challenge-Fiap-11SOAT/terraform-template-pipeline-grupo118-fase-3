@@ -128,8 +128,8 @@ jobs:
             /d:sonar.host.url="${{ inputs.sonar-host-url }}"
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/*.trx"
-            /d:sonar.coverage.exclusions="**/*Tests/**,**/*Test/**,**/Program.cs,**/Migrations/**"
-            /d:sonar.exclusions="**/TestResults/**,**/bin/**,**/obj/**"
+            /d:sonar.coverage.exclusions="**/*Tests/**,**/*Test/**,**/Program.cs,**/Migrations/**,**/*.yml,**/*.yaml"
+            /d:sonar.exclusions="**/TestResults/**,**/bin/**,**/obj/**,**/*.yml,**/*.yaml"
             /d:sonar.test.inclusions="**/*Tests/**,**/*Test/**"
             /d:sonar.qualitygate.wait=true
             /d:sonar.newCode.referenceBranch="${{ inputs.default-branch }}"
