@@ -13,6 +13,10 @@ on:
             required: false
             type: string
             default: "values-production.yaml"
+        secrets_mapping:
+            required: true
+            type: string
+            description: 'JSON mapping of variable names to secret values'            
     secrets: {}
 
 jobs:
@@ -42,7 +46,29 @@ jobs:
               run: |
                 az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
 
-## TODO: Create values from template
+## TODO: Validate Behavior
+            - name: Process Helm values with secrets
+              run: |
+                # Check if values file exists
+                if [ ! -f "${{ inputs.helm_values_file }}" ]; then
+                  echo "Error: Values file ${{ inputs.helm_values_file }} not found"
+                  exit 1
+                fi
+                
+                # Parse secrets mapping and export variables
+                echo '${{ inputs.secrets_mapping }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > export_vars.sh
+                
+                # Source the exports
+                source export_vars.sh
+                
+                # Replace secrets in values file using envsubst
+                envsubst < ${{ inputs.helm_values_file }} > values-processed.yaml
+                
+                echo "Processed Helm values:"
+                cat values-processed.yaml
+                
+                # Clean up
+                rm -f export_vars.sh
 ##
 
             - name: Log in to Azure Container Registry
