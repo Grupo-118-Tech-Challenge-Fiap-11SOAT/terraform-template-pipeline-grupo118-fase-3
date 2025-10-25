@@ -109,6 +109,12 @@ jobs:
 
             - name: Deploy to Kubernetes
               run: |
+
+                echo "=== Print Helm Chart Values ==="
+                cat values-processed.yaml
+
+                echo "=== Deploying Helm Chart ==="
+
                 helm upgrade --install ${{ inputs.helm_chart_name }} \
                 oci://${{ secrets.DOCKER_REGISTRY }}/helm/${{ inputs.helm_chart_name }} \
                 --version ${{ inputs.helm_chart_version }} \
