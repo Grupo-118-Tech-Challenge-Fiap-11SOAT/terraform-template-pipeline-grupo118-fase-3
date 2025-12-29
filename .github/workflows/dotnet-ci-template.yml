@@ -170,6 +170,7 @@ jobs:
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
       
       - name: SonarCloud End
+        continue-on-error:  ${{ github.ref != 'refs/heads/main' && (github.event_name != 'pull_request' || github.base_ref != 'main') }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
