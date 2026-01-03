@@ -23,15 +23,17 @@ The workflow automates the deployment process by:
    - `AZURE_CREDENTIALS` - Azure service principal credentials (JSON format)
    - `AZURE_RESOURCE_GROUP` - Azure resource group name
    - `AKS_CLUSTER_NAME` - AKS cluster name
+
+3. **Application-Specific Secrets in Consumer Repository**:
    - `DOCKER_REGISTRY` - ACR registry URL (e.g., `myregistry.azurecr.io`)
    - `ACR_USERNAME` - ACR username
    - `ACR_PASSWORD` - ACR password
-
-3. **Application-Specific Secrets in Consumer Repository**:
-   - Database credentials
-   - API keys
+   - Database credentials (e.g., `GS_POC_DATABASE_HOST`, `GS_POC_DATABASE_PORT`, etc.)
+   - API keys (e.g., `GS_POC_API_KEY`)
    - Connection strings
    - Any other application-specific secrets
+
+4. **Important**: Use `secrets: inherit` in your workflow to allow access to secrets from both repositories.
 
 ### Consumer Repository Setup
 
@@ -91,6 +93,16 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
+
+internalIngress:
+   enabled: true
+   className: "nginx-internal-static"
+   path: /my-api(/$)(.*)
+   pathType: ImplementationSpecific
+   annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
+      nginx.ingress.kubernetes.io/use-regex: "true"
+   tls: []
 
 resources:
   limits:
@@ -178,47 +190,54 @@ env:
 Create a workflow in your consumer repository using **two separate mappings**:
 
 ```yaml
-# .github/workflows/deploy-production.yml
-name: Deploy to Production
+# .github/workflows/cd.yml
+name: CD Pipeline
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
         description: 'Image tag to deploy'
         required: true
-        type: string
-        default: 'latest'
+      helm_chart_version:
+        description: 'Helm chart version to deploy'
+        required: true
+      helm_chart_name:
+        description: 'Field to insert the Helm Chart Name'
+        required: true
+        default: "my-chart"
+      helm_release_name:
+        description: 'Field to define the release name'
+        required: true
+        default: 'my-release-name'
 
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
-      helm_chart_version: "1.0.0"
-      helm_chart_name: "poc-api-dotnet"
+      helm_chart_version: ${{ github.event.inputs.helm_chart_version }}
+      helm_chart_name: ${{ github.event.inputs.helm_chart_name }}
       helm_values_file: "helm/values-production.yaml"
+      helm_release_name: ${{ github.event.inputs.helm_release_name }}
+      
+      # Secret mappings (variable name → secret name to lookup)
+      # Include infrastructure secrets (ACR) and application secrets
+      secrets_mapping: |
+        {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
+          "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
+          "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
+          "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
+          "POC_API_KEY": "GS_POC_API_KEY"
+        }
       
       # Non-secret variables (visible in logs for debugging)
       variables_mapping: |
         {
-          "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag || github.sha }}",
-          "POC_IMAGE_REPOSITORY": "pocdevopsgrupo118.azurecr.io/poc-api-dotnet",
-          "POC_ENVIRONMENT": "Production",
-          "POC_REPLICA_COUNT": "3"
-        }
-      
-      # Secret mappings (variable name → secret name to lookup)
-      secrets_mapping: |
-        {
-          "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
-          "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
-          "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
-          "POC_DATABASE_USER": "GS_POC_DATABASE_USER",
-          "POC_DATABASE_PASSWORD": "GS_POC_DATABASE_PASSWORD",
-          "POC_JWT_SECRET": "GS_POC_JWT_SECRET",
-          "POC_API_KEY": "GS_POC_API_KEY"
+          "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag }}"
         }
 ```
 
@@ -228,17 +247,31 @@ jobs:
 |-------|----------|---------|-------------|
 | `helm_chart_version` | Yes | - | Version of the Helm chart to deploy |
 | `helm_chart_name` | Yes | - | Name of the Helm chart |
+| `helm_release_name` | No | Same as `helm_chart_name` | Helm release name for the deployment |
 | `helm_values_file` | No | `values-production.yaml` | Path to the Helm values file in your repository |
 | `variables_mapping` | No | `{}` | JSON object mapping variable names to non-secret values |
 | `secrets_mapping` | Yes | - | JSON object mapping variable names to secret names (for lookup) |
 
 ## Variable and Secret Mapping
 
+### Important: Using `secrets: inherit`
+
+The workflow **must** include `secrets: inherit` to allow the reusable workflow to access secrets from both the consumer repository and the template repository. This is essential for the workflow to function properly.
+
+```yaml
+jobs:
+  deploy:
+    uses: org/repo/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit  # ← Required for secret access
+    with:
+      # ... inputs
+```
+
 ### Variables Mapping (Non-Secrets)
 
 The `variables_mapping` input contains **non-sensitive values** that will be visible in workflow logs. Use this for:
 - Image tags
-- Image repository
+- Image repository paths
 - Build numbers
 - Environment names
 - Replica counts
@@ -256,11 +289,10 @@ The `variables_mapping` input contains **non-sensitive values** that will be vis
 **Example:**
 ```json
 {
-  "POC_IMAGE_TAG": "${{ github.sha }}",
+  "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag }}",
   "POC_IMAGE_REPOSITORY": "pocdevopsgrupo118.azurecr.io/poc-api-dotnet",
   "POC_ENVIRONMENT": "Production",
-  "POC_REPLICA_COUNT": "3",
-  "POC_BUILD_NUMBER": "${{ github.run_number }}"
+  "POC_REPLICA_COUNT": "3"
 }
 ```
 
@@ -268,7 +300,10 @@ The `variables_mapping` input contains **non-sensitive values** that will be vis
 
 The `secrets_mapping` input maps variable names to **secret names** (not values). The workflow will lookup these secrets from the consumer repository's secrets store.
 
-**Important**: This mapping uses secret **names**, not values. The workflow will automatically retrieve the actual secret values.
+**Important**: 
+- This mapping uses secret **names**, not values
+- Include both infrastructure secrets (ACR credentials) and application secrets
+- ACR credentials (`DOCKER_REGISTRY`, `ACR_USERNAME`, `ACR_PASSWORD`) should typically map to themselves
 
 **Format:**
 ```json
@@ -281,13 +316,18 @@ The `secrets_mapping` input maps variable names to **secret names** (not values)
 **Example:**
 ```json
 {
+  "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+  "ACR_USERNAME": "ACR_USERNAME",
+  "ACR_PASSWORD": "ACR_PASSWORD",
   "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
-  "POC_DATABASE_PASSWORD": "GS_POC_DATABASE_PASSWORD",
+  "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
+  "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
   "POC_API_KEY": "GS_POC_API_KEY"
 }
 ```
 
 In this example:
+- Infrastructure secrets (ACR) are mapped directly
 - The Helm values file uses `${POC_DATABASE_HOST}` in the `secret.data` section
 - The workflow looks up the secret named `GS_POC_DATABASE_HOST` from your repository
 - The secret value is used to replace `${POC_DATABASE_HOST}` in the values file
@@ -304,41 +344,66 @@ The workflow uses `envsubst` to replace variables in your Helm values file. Vari
 
 ## Examples
 
-### Basic Deployment
+### Basic Deployment (Based on POC Usage)
 
 ```yaml
+name: CD Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: true
+      helm_chart_version:
+        description: 'Helm chart version to deploy'
+        required: true
+      helm_chart_name:
+        description: 'Helm Chart Name'
+        required: true
+        default: "my-chart"
+      helm_release_name:
+        description: 'Release name'
+        required: true
+        default: 'my-app'
+
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
-      helm_chart_version: "1.0.0"
-      helm_chart_name: "poc-api-dotnet"
-      variables_mapping: |
-        {
-          "POC_IMAGE_TAG": "${{ github.sha }}",
-          "POC_IMAGE_REPOSITORY": "pocdevopsgrupo118.azurecr.io/poc-api-dotnet",
-          "POC_ENVIRONMENT": "Production",
-          "POC_REPLICA_COUNT": "1"
-        }
+      helm_chart_version: ${{ github.event.inputs.helm_chart_version }}
+      helm_chart_name: ${{ github.event.inputs.helm_chart_name }}
+      helm_values_file: "helm/values-production.yaml"
+      helm_release_name: ${{ github.event.inputs.helm_release_name }}
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
           "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
           "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
-          "POC_DATABASE_PASSWORD": "GS_POC_DATABASE_PASSWORD"
+          "POC_API_KEY": "GS_POC_API_KEY"
+        }
+      variables_mapping: |
+        {
+          "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag }}"
         }
 ```
 
-### Deployment with All Secrets
+### Deployment with Additional Secrets
 
 ```yaml
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
       helm_chart_version: "1.0.0"
       helm_chart_name: "poc-api-dotnet"
       helm_values_file: "helm/values-production.yaml"
+      helm_release_name: "my-app-production"
       variables_mapping: |
         {
           "POC_IMAGE_TAG": "${{ github.sha }}",
@@ -348,6 +413,9 @@ jobs:
         }
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
           "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
           "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
@@ -363,11 +431,13 @@ jobs:
 ```yaml
 jobs:
   deploy-staging:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
       helm_chart_version: "1.0.0"
       helm_chart_name: "poc-api-dotnet"
       helm_values_file: "helm/values-staging.yaml"
+      helm_release_name: "my-app-staging"
       variables_mapping: |
         {
           "POC_IMAGE_TAG": "${{ github.sha }}",
@@ -377,6 +447,9 @@ jobs:
         }
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "STAGING_DATABASE_HOST",
           "POC_DATABASE_PORT": "STAGING_DATABASE_PORT",
           "POC_DATABASE_NAME": "STAGING_DATABASE_NAME",
@@ -387,11 +460,13 @@ jobs:
 
   deploy-production:
     needs: deploy-staging
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
       helm_chart_version: "1.0.0"
       helm_chart_name: "poc-api-dotnet"
       helm_values_file: "helm/values-production.yaml"
+      helm_release_name: "my-app-production"
       variables_mapping: |
         {
           "POC_IMAGE_TAG": "${{ github.sha }}",
@@ -401,6 +476,9 @@ jobs:
         }
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
           "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
           "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
@@ -415,11 +493,13 @@ jobs:
 ```yaml
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
       helm_chart_version: "1.0.0"
       helm_chart_name: "poc-api-dotnet"
       helm_values_file: "helm/values-production.yaml"
+      helm_release_name: "my-app"
       variables_mapping: |
         {
           "POC_IMAGE_TAG": "${{ github.sha }}",
@@ -432,6 +512,9 @@ jobs:
         }
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
           "POC_DATABASE_PASSWORD": "GS_POC_DATABASE_PASSWORD"
         }
@@ -446,21 +529,30 @@ on:
       image_tag:
         description: 'Docker image tag to deploy'
         required: true
-        type: string
+      helm_chart_version:
+        description: 'Helm chart version to deploy'
+        required: true
+      helm_chart_name:
+        description: 'Helm Chart Name'
+        required: true
+        default: "poc-api-dotnet"
+      helm_release_name:
+        description: 'Release name'
+        required: true
+        default: 'my-app'
       environment:
         description: 'Target environment'
         required: true
-        type: choice
-        options:
-          - Staging
-          - Production
 
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
-      helm_chart_version: "1.0.0"
-      helm_chart_name: "poc-api-dotnet"
+      helm_chart_version: ${{ github.event.inputs.helm_chart_version }}
+      helm_chart_name: ${{ github.event.inputs.helm_chart_name }}
+      helm_release_name: ${{ github.event.inputs.helm_release_name }}
+      helm_values_file: "helm/values-production.yaml"
       variables_mapping: |
         {
           "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag }}",
@@ -472,6 +564,9 @@ jobs:
         }
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "${{ github.event.inputs.environment == 'Production' && 'GS_POC_DATABASE_HOST' || 'STAGING_DATABASE_HOST' }}",
           "POC_DATABASE_PASSWORD": "${{ github.event.inputs.environment == 'Production' && 'GS_POC_DATABASE_PASSWORD' || 'STAGING_DATABASE_PASSWORD' }}",
           "POC_API_KEY": "GS_POC_API_KEY"
@@ -502,10 +597,10 @@ The workflow uses a two-tier secret management approach:
 **Template Repository Secrets** (Infrastructure):
 - Azure credentials (`AZURE_CREDENTIALS`)
 - AKS cluster information (`AZURE_RESOURCE_GROUP`, `AKS_CLUSTER_NAME`)
-- ACR credentials (`ACR_USERNAME`, `ACR_PASSWORD`)
 - Shared infrastructure secrets
 
-**Consumer Repository Secrets** (Application):
+**Consumer Repository Secrets** (Application + ACR):
+- ACR credentials (`DOCKER_REGISTRY`, `ACR_USERNAME`, `ACR_PASSWORD`)
 - Database credentials
 - API keys
 - Application-specific secrets
@@ -514,7 +609,7 @@ The workflow uses a two-tier secret management approach:
 ### Secret Flow
 
 ```
-Consumer Repo Secrets
+Consumer Repo Secrets (via secrets: inherit)
         ↓
   secrets_mapping (secret names only)
         ↓
@@ -533,18 +628,29 @@ Environment variables injected via secret.envVars
 
 ### Key Security Features
 
-1. **Secret names, not values** - `secrets_mapping` only contains secret names
-2. **Automatic masking** - Secret values are automatically masked in logs
-3. **Separate mappings** - Clear distinction between secrets and non-secrets
-4. **No secrets in workflow definition** - Secrets never appear in YAML files
-5. **Runtime lookup** - Secrets are retrieved only during execution
-6. **Kubernetes Secrets** - Secrets are stored as Kubernetes Secrets and injected as environment variables
+1. **secrets: inherit** - Enables access to secrets from both template and consumer repositories
+2. **Secret names, not values** - `secrets_mapping` only contains secret names
+3. **Automatic masking** - Secret values are automatically masked in logs
+4. **Separate mappings** - Clear distinction between secrets and non-secrets
+5. **No secrets in workflow definition** - Secrets never appear in YAML files
+6. **Runtime lookup** - Secrets are retrieved only during execution
+7. **Kubernetes Secrets** - Secrets are stored as Kubernetes Secrets and injected as environment variables
 
 ## Troubleshooting
 
 ### Common Issues
 
-**1. Values file not found**
+**1. Secret not accessible / Secret not found**
+```
+Error: Secret 'SECRET_NAME' not found
+```
+- Ensure `secrets: inherit` is included in your workflow job configuration
+- Verify the secret exists in your consumer repository settings
+- Check secret name spelling in `secrets_mapping`
+- Ensure the secret has a value set
+- Remember: use secret **name**, not the value
+
+**2. Values file not found**
 ```
 Error: Values file helm/values-production.yaml not found
 ```
@@ -552,7 +658,7 @@ Error: Values file helm/values-production.yaml not found
 - Verify the file exists in your repository
 - Check the file path doesn't have leading slashes
 
-**2. Variable not replaced**
+**3. Variable not replaced**
 ```
 Final values still show ${VAR_NAME}
 ```
@@ -561,16 +667,17 @@ Final values still show ${VAR_NAME}
 - Ensure you're using the correct syntax: `${VAR_NAME}` (not `{{VAR_NAME}}`)
 - Verify the JSON syntax is valid (no trailing commas)
 
-**3. Secret not found warning**
+**4. Secret not found warning**
 ```
 Warning: Secret 'SECRET_NAME' not found for variable 'VAR_NAME'
 ```
+- Verify `secrets: inherit` is present in the job
 - Verify the secret exists in your consumer repository settings
 - Check secret name spelling in `secrets_mapping`
 - Ensure the secret has a value set
 - Remember: use secret **name**, not the value
 
-**4. JSON parsing error**
+**5. JSON parsing error**
 ```
 jq: parse error: Expected another key-value pair at line X, column Y
 ```
@@ -617,35 +724,26 @@ Pod shows empty environment variables
 poc-api-dotnet-cicd-template-usage-fase4/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml
+│       └── cd.yml
 └── helm/
-    ├── values-staging.yaml
     └── values-production.yaml
 ```
 
 ### helm/values-production.yaml
 ```yaml
-replicaCount: ${POC_REPLICA_COUNT}
+replicaCount: 1
 
 image:
-  repository: ${POC_IMAGE_REPOSITORY}
+  repository: pocdevopsgrupo118.azurecr.io/poc-api-dotnet
   pullPolicy: Always
   tag: ${POC_IMAGE_TAG}
 
 imagePullSecrets:
   - name: acr-secret
 
-nameOverride: ""
-fullnameOverride: ""
-
 serviceAccount:
   create: true
   automount: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-podLabels: {}
 
 podSecurityContext:
   runAsNonRoot: true
@@ -663,7 +761,6 @@ service:
   type: LoadBalancer
   port: 80
   targetPort: 8080
-  annotations: {}
 
 resources:
   limits:
@@ -679,8 +776,6 @@ livenessProbe:
     port: http
   initialDelaySeconds: 30
   periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
 
 readinessProbe:
   httpGet:
@@ -688,14 +783,6 @@ readinessProbe:
     port: http
   initialDelaySeconds: 10
   periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 3
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
 
 volumes:
   - name: tmp
@@ -708,14 +795,10 @@ volumeMounts:
 secret:
   enabled: true
   name: "poc-api-dotnet-cicd-template-usage-fase4"
-  annotations: {}
   data:
     poc-db-host: "${POC_DATABASE_HOST}"
     poc-db-port: "${POC_DATABASE_PORT}"
     poc-db-name: "${POC_DATABASE_NAME}"
-    poc-db-user: "${POC_DATABASE_USER}"
-    poc-db-password: "${POC_DATABASE_PASSWORD}"
-    poc-jwt-secret: "${POC_JWT_SECRET}"
     poc-api-key: "${POC_API_KEY}"
   envVars:
     - name: POC_DATABASE_HOST
@@ -724,70 +807,65 @@ secret:
       secretKey: poc-db-port
     - name: POC_DATABASE_NAME
       secretKey: poc-db-name
-    - name: POC_DATABASE_USER
-      secretKey: poc-db-user
-    - name: POC_DATABASE_PASSWORD
-      secretKey: poc-db-password
-    - name: POC_JWT_SECRET
-      secretKey: poc-jwt-secret
     - name: POC_API_KEY
       secretKey: poc-api-key
-
-env:
-  - name: ASPNETCORE_ENVIRONMENT
-    value: "${POC_ENVIRONMENT}"
 ```
 
-### .github/workflows/deploy.yml
+### .github/workflows/cd.yml
 ```yaml
-name: Deploy to Production
+name: CD Pipeline
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
         description: 'Image tag to deploy'
         required: true
-        type: string
+      helm_chart_version:
+        description: 'Helm chart version to deploy'
+        required: true
+      helm_chart_name:
+        description: 'Field to insert the Helm Chart Name'
+        required: true
+        default: "grupo118fase4"
+      helm_release_name:
+        description: 'Field to define the release name'
+        required: true
+        default: 'poc-api-dotnet-cicd-template-usage-fase4'
 
 jobs:
   deploy:
-    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@main
+    uses: Grupo-118-Tech-Challenge-Fiap-11SOAT/terraform-template-pipeline-grupo118-fase-3/.github/workflows/dotnet-cd-template.yml@develop
+    secrets: inherit
     with:
-      helm_chart_version: "1.0.0"
-      helm_chart_name: "poc-api-dotnet"
+      helm_chart_version: ${{ github.event.inputs.helm_chart_version }}
+      helm_chart_name: ${{ github.event.inputs.helm_chart_name }}
       helm_values_file: "helm/values-production.yaml"
-      
-      variables_mapping: |
-        {
-          "POC_IMAGE_REPOSITORY": "pocdevopsgrupo118.azurecr.io/poc-api-dotnet",
-          "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag || github.sha }}",
-          "POC_ENVIRONMENT": "Production",
-          "POC_REPLICA_COUNT": "3"
-        }
-      
+      helm_release_name: ${{ github.event.inputs.helm_release_name }}
       secrets_mapping: |
         {
+          "DOCKER_REGISTRY": "DOCKER_REGISTRY",
+          "ACR_USERNAME": "ACR_USERNAME",
+          "ACR_PASSWORD": "ACR_PASSWORD",
           "POC_DATABASE_HOST": "GS_POC_DATABASE_HOST",
           "POC_DATABASE_PORT": "GS_POC_DATABASE_PORT",
           "POC_DATABASE_NAME": "GS_POC_DATABASE_NAME",
-          "POC_DATABASE_USER": "GS_POC_DATABASE_USER",
-          "POC_DATABASE_PASSWORD": "GS_POC_DATABASE_PASSWORD",
-          "POC_JWT_SECRET": "GS_POC_JWT_SECRET",
           "POC_API_KEY": "GS_POC_API_KEY"
+        }
+      variables_mapping: |
+        {
+          "POC_IMAGE_TAG": "${{ github.event.inputs.image_tag }}"
         }
 ```
 
 ### Required Secrets in Consumer Repository
-- `GS_POC_DATABASE_HOST`
-- `GS_POC_DATABASE_PORT`
-- `GS_POC_DATABASE_NAME`
-- `GS_POC_DATABASE_USER`
-- `GS_POC_DATABASE_PASSWORD`
-- `GS_POC_JWT_SECRET`
-- `GS_POC_API_KEY`
+- `DOCKER_REGISTRY` - ACR registry URL (e.g., `pocdevopsgrupo118.azurecr.io`)
+- `ACR_USERNAME` - ACR username
+- `ACR_PASSWORD` - ACR password
+- `GS_POC_DATABASE_HOST` - Database host
+- `GS_POC_DATABASE_PORT` - Database port
+- `GS_POC_DATABASE_NAME` - Database name
+- `GS_POC_API_KEY` - API key
 
 ## Workflow Output Example
 
