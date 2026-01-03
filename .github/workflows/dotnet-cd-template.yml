@@ -13,6 +13,10 @@ on:
             required: false
             type: string
             default: "values-production.yaml"
+        helm_release_name:
+            required: true
+            type: string
+            description: 'Release name that will appears on helm list command'
         secrets_mapping:
             required: true
             type: string
@@ -115,7 +119,7 @@ jobs:
 
                 echo "=== Deploying Helm Chart ==="
 
-                helm upgrade --install ${{ inputs.helm_chart_name }} \
+                helm upgrade --install ${{ inputs.helm_release_name }} \
                 oci://${{ secrets.DOCKER_REGISTRY }}/helm/${{ inputs.helm_chart_name }} \
                 --version ${{ inputs.helm_chart_version }} \
                 --namespace default \
