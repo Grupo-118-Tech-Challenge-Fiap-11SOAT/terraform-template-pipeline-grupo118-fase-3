@@ -1,0 +1,133 @@
+name: "DotNet CD Pipeline"
+
+on:
+  workflow_call:
+    inputs:
+        helm_chart_version:
+            required: true
+            type: string
+        helm_chart_name:
+            required: true
+            type: string
+        helm_values_file:
+            required: false
+            type: string
+            default: "values-production.yaml"
+        helm_release_name:
+            required: true
+            type: string
+            description: 'Release name that will appears on helm list command'
+        secrets_mapping:
+            required: true
+            type: string
+            description: 'JSON mapping of variable names to secret values'            
+        variables_mapping:
+            required: false
+            type: string
+            default: '{}'
+            description: 'JSON mapping of variable names to non-secret values'            
+    secrets: {}
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Azure Login
+              uses: azure/login@v1
+              with:
+                creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+
+            - name: Set up kubectl
+              uses: azure/setup-kubectl@v3
+              with:
+                 version: 'latest'
+
+            - name: Set up Helm
+              uses: azure/setup-helm@v3
+              with:
+                version: '3.12.0'      
+
+            - name: Get AKS credentials
+              run: |
+                az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
+
+## TODO: Validate Behavior
+            - name: Process Helm values with secrets and variables
+              env:
+                SECRETS_JSON: ${{ toJSON(secrets) }}
+              run: |
+                # Check if values file exists
+                if [ ! -f "${{ inputs.helm_values_file }}" ]; then
+                  echo "Error: Values file ${{ inputs.helm_values_file }} not found"
+                  exit 1
+                fi
+                
+                echo "=== Processing Variables ==="
+                
+                # Process common variables (non-secrets)
+                echo '${{ inputs.variables_mapping }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS='=' read -r var_name var_value; do
+                  echo "Setting variable: ${var_name}" >&2
+                  echo "export ${var_name}=\"${var_value}\""
+                done > export_vars.sh
+                
+                echo ""
+                echo "=== Processing Secrets ==="
+                
+                # Process secrets mapping
+                echo '${{ inputs.secrets_mapping }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS='=' read -r var_name secret_name; do
+                  # Get secret value from SECRETS_JSON using jq
+                  secret_value=$(echo "$SECRETS_JSON" | jq -r --arg key "$secret_name" '.[$key] // ""')
+                  
+                  if [ -z "$secret_value" ]; then
+                    echo "Warning: Secret '$secret_name' not found for variable '$var_name'" >&2
+                  else
+                    echo "Setting secret variable: ${var_name} (from secret: ${secret_name})" >&2
+                    echo "export ${var_name}=\"${secret_value}\""
+                  fi
+                done >> export_vars.sh
+                
+                echo ""
+                echo "=== Generated Exports (secrets masked) ==="
+                cat export_vars.sh | sed 's/=.*/=***MASKED***/g'
+                
+                # Source the exports
+                source export_vars.sh
+                
+                # Replace variables in values file using envsubst
+                envsubst < ${{ inputs.helm_values_file }} > values-processed.yaml
+                
+                echo ""
+                echo "=== Processed Helm Values ==="
+                cat values-processed.yaml
+                
+                # Clean up
+                rm -f export_vars.sh
+
+            - name: Log in to Azure Container Registry
+              run: |
+                helm registry login ${{ secrets.DOCKER_REGISTRY }} --username ${{ secrets.ACR_USERNAME }} --password ${{ secrets.ACR_PASSWORD }}
+
+            - name: Deploy to Kubernetes
+              run: |
+
+                echo "=== Print Helm Chart Values ==="
+                cat values-processed.yaml
+
+                echo "=== Deploying Helm Chart ==="
+
+                helm upgrade --install ${{ inputs.helm_release_name }} \
+                oci://${{ secrets.DOCKER_REGISTRY }}/helm/${{ inputs.helm_chart_name }} \
+                --version ${{ inputs.helm_chart_version }} \
+                --namespace default \
+                --create-namespace \
+                --values values-processed.yaml \
+                --timeout=10m \
+
+            - name: Clean up temporary files
+              if: always()
+              run: |
+                rm -f values-processed.yaml
